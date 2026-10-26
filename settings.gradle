@@ -1,0 +1,2 @@
+rootProject.name = "NASMin"
+include ':app'

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NAS Min</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #fafafa; color: #1d1b20; }
+header { display: flex; align-items: center; padding: 8px 16px; background: #fff; border-bottom: 1px solid #e0e0e0; gap: 8px; position: sticky; top: 0; z-index: 10; }
+.icon-btn { background: none; border: none; font-size: 20px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; color: #555; }
+.icon-btn:hover { background: #f0f0f0; }
+.title { flex: 1; font-size: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+main { padding: 8px 0 100px; }
+.item { display: flex; align-items: center; padding: 12px 16px; gap: 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.item:hover { background: #f5f5f5; }
+.icon { font-size: 24px; width: 32px; text-align: center; }
+.info { flex: 1; min-width: 0; }
+.name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { font-size: 12px; color: #888; }
+.more { background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 8px; }
+.fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 16px; background: #6750a4; color: #fff; font-size: 28px; border: none; cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; padding: 16px; z-index: 100; }
+.modal.show { display: flex; }
+.dialog { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; max-height: 85vh; overflow-y: auto; }
+.dialog h3 { margin: 0 0 16px; font-size: 18px; }
+.dialog input, .dialog textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; margin-bottom: 12px; font-family: inherit; }
+.dialog textarea { height: 200px; resize: vertical; font-family: monospace; }
+.row { display: flex; justify-content: flex-end; gap: 8px; }
+.btn { padding: 10px 20px; border-radius: 20px; border: none; font-size: 14px; cursor: pointer; }
+.btn-primary { background: #6750a4; color: #fff; }
+.btn-text { background: none; color: #6750a4; }
+.sheet { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: flex-end; z-index: 100; }
+.sheet.show { display: flex; }
+.sheet-body { background: #fff; width: 100%; border-radius: 16px 16px 0 0; padding: 8px 0 24px; }
+.sheet-item { padding: 16px 24px; font-size: 15px; cursor: pointer; }
+.sheet-item:hover { background: #f5f5f5; }
+.sheet-item.danger { color: #b3261e; }
+.toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200; }
+.toast.show { opacity: 1; }
+.empty { text-align: center; padding: 40px; color: #999; }
+#progress { position: fixed; bottom: 0; left: 0; height: 3px; background: #6750a4; width: 0; transition: width 0.2s; z-index: 50; }
+.banner { background: #b3261e; color: #fff; padding: 8px 16px; font-size: 13px; display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="icon-btn" onclick="goUp()">←</button>
+  <div class="title" id="path">/</div>
+  <button class="icon-btn" onclick="toggleSearch()">🔍</button>
+  <button class="icon-btn" onclick="openMenu()">⋮</button>
+</header>
+
+<div class="banner" id="warnBanner">⚠️ 正在使用默认密码 admin，请尽快修改</div>
+
+<div id="searchBar" style="display:none; padding:8px 16px; background:#fff; border-bottom:1px solid #eee;">
+  <input id="searchInput" placeholder="搜索文件..." style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px;" onkeydown="if(event.key==='Enter')doSearch()">
+</div>
+
+<main id="list"><div class="empty">加载中...</div></main>
+
+<button class="fab" onclick="document.getElementById('fileInput').click()">+</button>
+<input type="file" id="fileInput" style="display:none" onchange="uploadFiles(this.files)">
+
+<div class="sheet" id="menuSheet" onclick="if(event.target===this)closeSheet('menuSheet')">
+  <div class="sheet-body">
+    <div class="sheet-item" onclick="showMkdir()">📁 新建文件夹</div>
+    <div class="sheet-item" onclick="showChangePwd()">🔑 修改密码</div>
+    <div class="sheet-item" onclick="showAbout()">ℹ️ 关于</div>
+  </div>
+</div>
+
+<div class="sheet" id="fileSheet" onclick="if(event.target===this)closeSheet('fileSheet')">
+  <div class="sheet-body" id="fileSheetBody"></div>
+</div>
+
+<div class="modal" id="editModal" onclick="if(event.target===this)closeModal('editModal')">
+  <div class="dialog">
+    <h3 id="editTitle">编辑</h3>
+    <textarea id="editContent"></textarea>
+    <div class="row">
+      <button class="btn btn-text" onclick="closeModal('editModal')">取消</button>
+      <button class="btn btn-primary" onclick="doSave()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mkdirModal" onclick="if(event.target===this)closeModal('mkdirModal')">
+  <div class="dialog">
+    <h3>新建文件夹</h3>
+    <input id="mkdirName" placeholder="文件夹名称">
+    <div class="row">
+      <button class="btn btn-text" onclick="closeModal('mkdirModal')">取消</button>
+      <button class="btn btn-primary" onclick="doMkdir()">创建</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="pwdModal" onclick="if(event.target===this)closeModal('pwdModal')">
+  <div class="dialog">
+    <h3>修改管理员密码</h3>
+    <input id="newPwd" type="password" placeholder="新密码（至少 4 位）">
+    <div class="row">
+      <button class="btn btn-text" onclick="closeModal('pwdModal')">取消</button>
+      <button class="btn btn-primary" onclick="doChangePwd()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="aboutModal" onclick="if(event.target===this)closeModal('aboutModal')">
+  <div class="dialog">
+    <h3>关于 NAS Min</h3>
+    <p>版本 1.0.0</p>
+    <p>极限精简版。仅保留文件服务主线，仅监听 8080。</p>
+    <div class="row"><button class="btn btn-primary" onclick="closeModal('aboutModal')">确定</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="progress"></div>
+
+<script>
+var currentPath = "/";
+var editingPath = "";
+var currentFile = null;
+
+function authHeader() {
+  return localStorage.getItem("nasmin_auth") || "";
+}
+
+function api(url, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  var a = authHeader();
+  if (a) opts.headers["Authorization"] = a;
+  return fetch(url, opts).then(function(r) {
+    if (r.status === 401) {
+      var u = prompt("账号", "admin");
+      if (u === null) return Promise.reject(new Error("cancelled"));
+      var p = prompt("密码", "admin");
+      if (p === null) return Promise.reject(new Error("cancelled"));
+      localStorage.setItem("nasmin_auth", "Basic " + btoa(u + ":" + p));
+      return api(url, opts);
+    }
+    return r;
+  });
+}
+
+function toast(msg) {
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._tid);
+  t._tid = setTimeout(function() { t.classList.remove("show"); }, 2000);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function showModal(id) { document.getElementById(id).classList.add("show"); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+function showSheet(id) { document.getElementById(id).classList.add("show"); }
+function closeSheet(id) { document.getElementById(id).classList.remove("show"); }
+
+function refresh() {
+  closeSearch();
+  document.getElementById("path").textContent = currentPath;
+  api("/api/list?path=" + encodeURIComponent(currentPath)).then(function(r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }).then(function(data) {
+    render(data.files || []);
+    checkStatus();
+  }).catch(function(e) { toast("加载失败: " + e.message); });
+}
+
+function checkStatus() {
+  api("/api/status").then(function(r) { return r.json(); }).then(function(s) {
+    document.getElementById("warnBanner").style.display = s.isDefaultPwd ? "block" : "none";
+  }).catch(function() {});
+}
+
+function render(files) {
+  var list = document.getElementById("list");
+  list.innerHTML = "";
+  if (!files.length) {
+    list.innerHTML = '<div class="empty">空文件夹</div>';
+    return;
+  }
+  files.forEach(function(f) {
+    var full = f.path || (currentPath === "/" ? "/" + f.name : currentPath + "/" + f.name);
+    var div = document.createElement("div");
+    div.className = "item";
+    var icon = f.dir ? "📁" : "📄";
+    var size = f.dir ? "文件夹" : formatSize(f.size);
+    div.innerHTML = '<div class="icon">' + icon + '</div>' +
+      '<div class="info"><div class="name">' + esc(f.name) + '</div><div class="meta">' + size + '</div></div>' +
+      '<button class="more">⋮</button>';
+    div.onclick = function(e) {
+      if (e.target.classList.contains("more")) {
+        openFileMenu(f, full);
+      } else if (f.dir) {
+        currentPath = full;
+        refresh();
+      } else {
+        openFileMenu(f, full);
+      }
+    };
+    list.appendChild(div);
+  });
+}
+
+function formatSize(s) {
+  if (s < 1024) return s + " B";
+  if (s < 1024 * 1024) return (s / 1024).toFixed(1) + " KB";
+  return (s / 1024 / 1024).toFixed(1) + " MB";
+}
+
+function goUp() {
+  if (currentPath === "/") return;
+  var parts = currentPath.replace(/\/$/, "").split("/");
+  parts.pop();
+  currentPath = parts.join("/") || "/";
+  refresh();
+}
+
+function toggleSearch() {
+  var bar = document.getElementById("searchBar");
+  if (bar.style.display === "none") {
+    bar.style.display = "block";
+    document.getElementById("searchInput").focus();
+  } else {
+    closeSearch();
+    refresh();
+  }
+}
+
+function closeSearch() {
+  document.getElementById("searchBar").style.display = "none";
+  document.getElementById("searchInput").value = "";
+}
+
+function doSearch() {
+  var q = document.getElementById("searchInput").value.trim();
+  if (!q) { refresh(); return; }
+  document.getElementById("path").textContent = "搜索: " + q;
+  api("/api/search?q=" + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(data) {
+    render(data);
+  }).catch(function() { toast("搜索失败"); });
+}
+
+function openMenu() { showSheet("menuSheet"); }
+
+function openFileMenu(f, fullPath) {
+  currentFile = { item: f, path: fullPath };
+  var body = document.getElementById("fileSheetBody");
+  body.innerHTML = "";
+  function add(text, danger, onClick) {
+    var d = document.createElement("div");
+    d.className = "sheet-item" + (danger ? " danger" : "");
+    d.textContent = text;
+    d.onclick = function() { closeSheet("fileSheet"); onClick(); };
+    body.appendChild(d);
+  }
+  if (!f.dir) {
+    var ext = f.name.indexOf(".") >= 0 ? f.name.split(".").pop().toLowerCase() : "";
+    var isText = ["txt","md","json","java","html","xml","js","css","py","log","ini","sh"].indexOf(ext) >= 0;
+    if (isText) add("✏️ 编辑", false, function() { editFile(f, fullPath); });
+    if (ext === "zip") add("📦 解压", false, function() { unzip(fullPath); });
+    add("📥 下载", false, function() { downloadFile(fullPath); });
+    add("🏷️ 重命名", false, function() { renameFile(f, fullPath); });
+  }
+  add("🗑️ 删除", true, function() { delFile(fullPath); });
+  showSheet("fileSheet");
+}
+
+function downloadFile(fullPath) {
+  api("/api/download?path=" + encodeURIComponent(fullPath)).then(function(r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.blob();
+  }).then(function(blob) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fullPath.split("/").pop();
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }).catch(function(e) { toast("下载失败: " + e.message); });
+}
+
+function editFile(f, fullPath) {
+  editingPath = fullPath;
+  document.getElementById("editTitle").textContent = "编辑: " + f.name;
+  document.getElementById("editContent").value = "加载中...";
+  showModal("editModal");
+  api("/api/preview?path=" + encodeURIComponent(fullPath)).then(function(r) { return r.text(); }).then(function(t) {
+    document.getElementById("editContent").value = t;
+  }).catch(function() { toast("加载失败"); });
+}
+
+function doSave() {
+  var content = document.getElementById("editContent").value;
+  var fd = new FormData();
+  fd.append("path", editingPath);
+  fd.append("content", content);
+  api("/api/save", { method: "POST", body: fd }).then(function(r) {
+    if (r.ok) { closeModal("editModal"); refresh(); toast("已保存"); }
+    else toast("保存失败");
+  });
+}
+
+function unzip(fullPath) {
+  var fd = new FormData();
+  fd.append("path", fullPath);
+  api("/api/unzip", { method: "POST", body: fd }).then(function(r) {
+    if (r.ok) { refresh(); toast("解压成功"); }
+    else toast("解压失败");
+  });
+}
+
+function renameFile(f, fullPath) {
+  var n = prompt("新名称", f.name);
+  if (!n || n === f.name) return;
+  var fd = new FormData();
+  fd.append("path", fullPath);
+  fd.append("newName", n);
+  api("/api/rename", { method: "POST", body: fd }).then(function(r) {
+    if (r.ok) refresh(); else toast("重命名失败");
+  });
+}
+
+function delFile(fullPath) {
+  if (!confirm("确定删除？不可恢复。")) return;
+  var fd = new FormData();
+  fd.append("path", fullPath);
+  api("/api/delete", { method: "POST", body: fd }).then(function(r) {
+    if (r.ok) refresh(); else toast("删除失败");
+  });
+}
+
+function showMkdir() {
+  closeSheet("menuSheet");
+  document.getElementById("mkdirName").value = "";
+  showModal("mkdirModal");
+}
+
+function doMkdir() {
+  var name = document.getElementById("mkdirName").value.trim();
+  if (!name) return;
+  var fd = new FormData();
+  fd.append("path", currentPath);
+  fd.append("name", name);
+  api("/api/mkdir", { method: "POST", body: fd }).then(function(r) {
+    if (r.ok) { closeModal("mkdirModal"); refresh(); toast("已创建"); }
+    else toast("创建失败");
+  });
+}
+
+function showChangePwd() {
+  closeSheet("menuSheet");
+  document.getElementById("newPwd").value = "";
+  showModal("pwdModal");
+}
+
+function doChangePwd() {
+  var p = document.getElementById("newPwd").value;
+  if (p.length < 4) { toast("密码至少 4 位"); return; }
+  var fd = new FormData();
+  fd.append("password", p);
+  api("/api/password", { method: "POST", body: fd }).then(function(r) {
+    if (r.ok) { closeModal("pwdModal"); toast("已修改"); checkStatus(); }
+    else toast("修改失败");
+  });
+}
+
+function showAbout() { closeSheet("menuSheet"); showModal("aboutModal"); }
+
+function uploadFiles(files) {
+  if (!files.length) return;
+  var file = files[0];
+  var url = "/api/upload?path=" + encodeURIComponent(currentPath) + "&name=" + encodeURIComponent(file.name);
+  var xhr = new XMLHttpRequest();
+  xhr.open("PUT", url, true);
+  xhr.setRequestHeader("Authorization", authHeader());
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  var progress = document.getElementById("progress");
+  progress.style.width = "0%";
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) progress.style.width = ((e.loaded / e.total) * 100) + "%";
+  };
+  xhr.onload = function() {
+    progress.style.width = "0%";
+    if (xhr.status === 200) { refresh(); toast("上传成功"); }
+    else if (xhr.status === 401) { localStorage.removeItem("nasmin_auth"); toast("请重新登录"); }
+    else toast("上传失败: " + xhr.status);
+    document.getElementById("fileInput").value = "";
+  };
+  xhr.onerror = function() { toast("上传失败"); progress.style.width = "0%"; };
+  xhr.send(file);
+}
+
+refresh();
+</script>
+</body>
+</html>
