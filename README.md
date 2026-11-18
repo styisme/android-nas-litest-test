@@ -1,5 +1,11 @@
 # Android NAS Lite (Experimental)
 
+> **⏸️ 临时停更通知**
+>
+> **本项目自 2026-11-18 起进入临时停更状态。** 本仓库是极限裁剪实验，其归档性质见下方说明；停更期间同样不做功能开发、版本发布与常规维护，仅保留现有代码与实验记录。恢复更新时间待定。
+>
+> **Temporarily paused:** this experimental repository has been paused since 2026-11-18. No new features, releases, or routine maintenance; the existing code and experiment records are kept as-is. The resumption date is TBD.
+
 > ⚠️ **警告：本项目为实验性归档项目。作者已完成极限裁剪实验，后续不再进行任何功能更新、Bug 修复或维护。**
 
 > 🤖 **AI 生成声明**：本仓库 99% 以上的代码（包含 Java、HTML、CSS、CI 脚本）均由大语言模型（LLM）直接生成，人类开发者仅负责提出“极限裁剪”需求、真机测试与发版决策。完整声明请参阅 [`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md)。
